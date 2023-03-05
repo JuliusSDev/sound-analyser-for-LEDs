@@ -1,16 +1,18 @@
 #include "SoundAnalyser.hpp"
 
 SoundAnalyser::SoundAnalyser(){
+    inAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
+    outAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
+    ftransPlan = fftw_plan_dft_1d(FRAMES_PER_BUFFER, inAnaliseBuffer, outAnaliseBuffer, FFTW_FORWARD, FFTW_MEASURE); // probably fftw_backward
+    fqMagnitudes = new double[FREQ_MAGNITUDES_BUFFER_SIZE];
+
     err = paNoError;
-
-    recordedSamples = new SAMPLE[FRAMES_PER_BUFFER]();  /* From now on, recordedSamples is initialised. */
-
     err = Pa_Initialize();
     checkIfErrorOccured();
 
     inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
     if (inputParameters.device == paNoDevice) {
-        fprintf(stderr,"Error: No default input device.\n");
+        std::cerr << "Error: No default input device." << std::endl;
         throw PortAudioException(DEVICE_NOT_FOUND_ERROR);
     }
 
@@ -18,6 +20,8 @@ SoundAnalyser::SoundAnalyser(){
     inputParameters.sampleFormat = PA_SAMPLE_TYPE;
     inputParameters.suggestedLatency = SUGGESTED_LATTENCY;
     inputParameters.hostApiSpecificStreamInfo = NULL;
+
+    analyzerPtr = this;
 
     /* Record some audio. -------------------------------------------- */
     err = Pa_OpenStream(&stream,
@@ -27,45 +31,53 @@ SoundAnalyser::SoundAnalyser(){
                         FRAMES_PER_BUFFER,
                         paClipOff,      /* we won't output out of range samples so don't bother clipping them */
                         recordCallback,
-                        recordedSamples);
+                        analyzerPtr);
     checkIfErrorOccured();
 
     err = Pa_StartStream( stream );
     checkIfErrorOccured();
 
-    printf("\n=== Now recording!! Please speak into the microphone. ===\n"); fflush(stdout);
+
+    std::cout << std::endl << "=== Now recording!! Please speak into the microphone. ===" << std::endl;
 }
 
 SoundAnalyser::~SoundAnalyser(){
     err = Pa_CloseStream(stream);
     Pa_Terminate();
-    if(recordedSamples){       /* Sure it is NULL or valid. */
-        delete[] recordedSamples;
-    }
     if( err != paNoError ){
-        fprintf( stderr, "An error occurred while using the portaudio stream\n" );
-        fprintf( stderr, "Error number: %d\n", err );
-        fprintf( stderr, "Error message: %s\n", Pa_GetErrorText( err ) );
+        std::cerr << "An error occurred while using the portaudio stream" << std::endl;
+        std::cerr << "Error number: " << err << std::endl;
+        std::cerr << "Error message: " << Pa_GetErrorText(err) << std::endl;
     }
+
+    fftw_destroy_plan(ftransPlan);
+    fftw_free(inAnaliseBuffer); fftw_free(outAnaliseBuffer);
+    delete[] fqMagnitudes;
 }
 
 void SoundAnalyser::analizeSamples(const SAMPLE *samplesBuffer){
-    static float max_of_maxes = 0;
-    float max = 0, val = 0;
+    
+
     for(int i = 0; i < FRAMES_PER_BUFFER; i++){
-        val = samplesBuffer[i];
-        if( val < 0 ) val = -val; /* ABS */
-        if( val > max ){
-            max = val;
+        inAnaliseBuffer[i][0] = static_cast<double>(samplesBuffer[i]);
+        inAnaliseBuffer[i][1] = 0;
+    }
+
+    fftw_execute(ftransPlan);
+
+    //TODO move part in this function bellow to another thread?
+    
+    double max_mag_db = 0, max_mag_db_index = 0;
+    for(int i = 0; i < FREQ_MAGNITUDES_BUFFER_SIZE; i++){
+        fqMagnitudes[i] = 10 * std::log10(std::sqrt(outAnaliseBuffer[i][0]*outAnaliseBuffer[i][0] + outAnaliseBuffer[i][1]*outAnaliseBuffer[i][1]));
+        if(max_mag_db < fqMagnitudes[i]){
+            max_mag_db = fqMagnitudes[i];
+            max_mag_db_index = i;
         }
     }
 
-    if(max > max_of_maxes){
-        max_of_maxes = max;
-    }
-
-    printf("sample max amplitude = " PRINTF_S_FORMAT ",   absolute max = " PRINTF_S_FORMAT "\n", max, max_of_maxes);
-    fflush(stdout);
+    printf("Max_mag_db = %3.7f, at freq = %5.2f\n", 
+            max_mag_db, max_mag_db_index * ((SAMPLE_RATE/2)/FREQ_MAGNITUDES_BUFFER_SIZE));
 }
 
 void SoundAnalyser::checkIfErrorOccured(){
@@ -80,14 +92,14 @@ int SoundAnalyser::recordCallback( const void *inputBuffer, void *outputBuffer,
                             PaStreamCallbackFlags statusFlags,
                             void *userData ){
     const SAMPLE *samplesBuffer = (const SAMPLE*)inputBuffer;
+    SoundAnalyser* analizerPtr = (SoundAnalyser*) userData;
     int finished;
 
     (void) outputBuffer; /* Prevent unused variable warnings. */
     (void) timeInfo;
     (void) statusFlags;
-    (void) userData;
 
-    analizeSamples(samplesBuffer);
+    analizerPtr->analizeSamples(samplesBuffer);
 
     //finished = paComplete;  // to stop reccording
     finished = paContinue;  // to continue reccording

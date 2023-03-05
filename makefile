@@ -1,17 +1,21 @@
 # List your *.h files (if you do not have them in your project then leave the variable "headers" empty):
-headers = src/SoundAnalyser.hpp
+headers = src/SoundAnalyser.hpp 
 
 # List your *.cpp files:
 sources = src/SoundAnalyser.cpp src/main.cpp
 
 # List your libs -l* files:
-libs = -lfftw3 -lportaudio
+libs = -lfftw3 -lfftw3_omp -lportaudio -fopenmp
+
+includePath = /home/almthehedgehog/Documents/home/sound-analyser-for-LEDs/include/
+
+libsPath = /home/almthehedgehog/Documents/home/sound-analyser-for-LEDs/include/
 
 # Specify name of your program:
 executable = target/SoundAnalyser
 
 $(executable): $(headers) $(sources)
-	g++ -g -Wall -pedantic $(libs) $(sources) -o $(executable)
+	g++ -g -Wall -pedantic -I$(includePath) -L$(libsPath) $(libs) $(sources) -o $(executable)
 
 .PHONY: clean
 clean:
