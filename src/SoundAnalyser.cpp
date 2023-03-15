@@ -1,10 +1,10 @@
 #include "SoundAnalyser.hpp"
 
-SoundAnalyser::SoundAnalyser(){
+SoundAnalyser::SoundAnalyser():dbfsRefference(0){
     inAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
     outAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
     ftransPlan = fftw_plan_dft_1d(FRAMES_PER_BUFFER, inAnaliseBuffer, outAnaliseBuffer, FFTW_FORWARD, FFTW_MEASURE); // probably fftw_backward
-    fqMagnitudes = new double[FREQ_MAGNITUDES_BUFFER_SIZE];
+    fqDBFS_linearSpectrum = new double[FREQ_MAGNITUDES_BUFFER_SIZE];
 
     err = paNoError;
     err = Pa_Initialize();
@@ -52,12 +52,10 @@ SoundAnalyser::~SoundAnalyser(){
 
     fftw_destroy_plan(ftransPlan);
     fftw_free(inAnaliseBuffer); fftw_free(outAnaliseBuffer);
-    delete[] fqMagnitudes;
+    delete[] fqDBFS_linearSpectrum;
 }
 
 void SoundAnalyser::analizeSamples(const SAMPLE *samplesBuffer){
-    
-
     for(int i = 0; i < FRAMES_PER_BUFFER; i++){
         inAnaliseBuffer[i][0] = static_cast<double>(samplesBuffer[i]);
         inAnaliseBuffer[i][1] = 0;
@@ -67,17 +65,30 @@ void SoundAnalyser::analizeSamples(const SAMPLE *samplesBuffer){
 
     //TODO move part in this function bellow to another thread?
     
-    double max_mag_db = 0, max_mag_db_index = 0;
+    double max_mag_db = -DBL_MAX, max_mag_db_index = 0, sampleMagnitude = 0, relativeMagnitude;
     for(int i = 0; i < FREQ_MAGNITUDES_BUFFER_SIZE; i++){
-        fqMagnitudes[i] = 10 * std::log10(std::sqrt(outAnaliseBuffer[i][0]*outAnaliseBuffer[i][0] + outAnaliseBuffer[i][1]*outAnaliseBuffer[i][1]));
-        if(max_mag_db < fqMagnitudes[i]){
-            max_mag_db = fqMagnitudes[i];
+        sampleMagnitude = calcMagnitude(outAnaliseBuffer[i]);
+        relativeMagnitude = sampleMagnitude / dbfsRefference;
+        if(relativeMagnitude != 0){
+            fqDBFS_linearSpectrum[i] = 20 * std::log10(sampleMagnitude / dbfsRefference);
+        }else{
+            fqDBFS_linearSpectrum[i] = SILENT_DBFS;
+        }
+        if(max_mag_db < fqDBFS_linearSpectrum[i]){
+            max_mag_db = fqDBFS_linearSpectrum[i];
             max_mag_db_index = i;
+        }
+        if(sampleMagnitude > dbfsRefference){
+            dbfsRefference = sampleMagnitude;
         }
     }
 
-    printf("Max_mag_db = %3.7f, at freq = %5.2f\n", 
-            max_mag_db, max_mag_db_index * ((SAMPLE_RATE/2)/FREQ_MAGNITUDES_BUFFER_SIZE));
+    printf("Max_mag_db = %f, at freq = %5.2f,   div = %f         ref = %f\n", 
+            max_mag_db, max_mag_db_index * ((SAMPLE_RATE/2)/FREQ_MAGNITUDES_BUFFER_SIZE), std::log10(sampleMagnitude / dbfsRefference), dbfsRefference);
+}
+
+double SoundAnalyser::calcMagnitude(const fftw_complex &realSample){
+    return std::sqrt(realSample[0]*realSample[0] + realSample[1]*realSample[1]);
 }
 
 void SoundAnalyser::checkIfErrorOccured(){
