@@ -6,8 +6,6 @@ SoundAnalyser::SoundAnalyser(std::string bluetoothMACaddress):
     outAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
     ftransPlan = fftw_plan_dft_1d(FRAMES_PER_BUFFER, inAnaliseBuffer, outAnaliseBuffer, FFTW_FORWARD, FFTW_MEASURE); // probably fftw_backward
     fqDBFS_linearSpectrum = new double[FREQ_MAGNITUDES_BUFFER_SIZE];
-    preparedLedArray.size = NUMBER_OF_LEDS*NUMBER_OF_COLORS + SIZE_OF_ARRAY_LENGTH + SIZE_OF_COMCODE;
-    preparedLedArray.array = new uint8_t[preparedLedArray.size];
 
     err = paNoError;
     err = Pa_Initialize();
@@ -54,7 +52,6 @@ SoundAnalyser::~SoundAnalyser(){
     fftw_destroy_plan(ftransPlan);
     fftw_free(inAnaliseBuffer); fftw_free(outAnaliseBuffer);
     delete[] fqDBFS_linearSpectrum;
-    delete[] preparedLedArray.array;
 }
 
 void SoundAnalyser::reset_dbfsRefference(){
@@ -101,52 +98,25 @@ void SoundAnalyser::analizeSamples(SamplesBuffer samplesBuffer){
         }
     }
     convertRelativeMagsToBrightnessInFilters();
-    prepareSoundLedArray();
-    printf("  low = %f,         mid = %f,        high = %f\n", filtersValues.lowFilter.highestDBFS, 
-                                        filtersValues.midFilter.highestDBFS, 
-                                        filtersValues.highFilter.highestDBFS);
-    printf("%f <> %f, %f <> %f, %f <> %f\n", filtersValues.lowFilter.minLimitDBFS, filtersValues.lowFilter.maxLimitDBFS,
-                                            filtersValues.midFilter.minLimitDBFS, filtersValues.midFilter.maxLimitDBFS,
-                                            filtersValues.highFilter.minLimitDBFS, filtersValues.highFilter.maxLimitDBFS);
-    printf("brtns-low = %d,      brtns-mid = %d,     brtns-high = %d\n", filtersValues.lowFilter.ledBrightness, 
-                                        filtersValues.midFilter.ledBrightness, 
-                                        filtersValues.highFilter.ledBrightness);
-    bluetoothCommunicator.sendData(preparedLedArray.array, preparedLedArray.size);  // TODO make a prepare data function. it will prepare the array with leds colors + command code+ length. Then send it with btComm.sendData()
+    #ifdef DEBUG
+        printLogs();  //Show debug info
+    #endif
+    bluetoothCommunicator.send_RGB_EQ_SOUND(filtersValues.lowFilter.ledBrightness,
+                                            filtersValues.midFilter.ledBrightness/2,
+                                            filtersValues.highFilter.ledBrightness/2);
+    // bluetoothCommunicator.send_ONE_COLOR_EQ_SOUND(filtersValues.lowFilter.ledBrightness, 0, 0);
 }
 
 void SoundAnalyser::convertRelativeMagsToBrightnessInFilters(){
     adjustFilterLimits(&filtersValues.lowFilter);
     adjustFilterLimits(&filtersValues.midFilter);
     adjustFilterLimits(&filtersValues.highFilter);
+    filtersValues.lowFilter.ledBrightness_previous = filtersValues.lowFilter.ledBrightness;
+    filtersValues.midFilter.ledBrightness_previous = filtersValues.midFilter.ledBrightness;
+    filtersValues.highFilter.ledBrightness_previous = filtersValues.highFilter.ledBrightness;
     filtersValues.lowFilter.ledBrightness = calcLedBrightness(filtersValues.lowFilter);
     filtersValues.midFilter.ledBrightness = calcLedBrightness(filtersValues.midFilter);
     filtersValues.highFilter.ledBrightness = calcLedBrightness(filtersValues.highFilter);
-}
-
-void SoundAnalyser::prepareSoundLedArray(){
-    preparedLedArray.array[0] = COMCODE_SOUND_LEDS;
-    preparedLedArray.array[1] = 0;
-    preparedLedArray.array[2] = NUMBER_OF_LEDS;
-    for(int i = SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH; 
-            i < ((NUMBER_OF_LEDS * NUMBER_OF_COLORS) + SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH); 
-            // i += NUMBER_OF_COLORS){
-            i += 5*NUMBER_OF_COLORS){
-        preparedLedArray.array[i] = filtersValues.lowFilter.ledBrightness; //R
-        preparedLedArray.array[i+1] = 0; //G
-        preparedLedArray.array[i+2] = 0; //B
-        preparedLedArray.array[i + (1*NUMBER_OF_COLORS)] = 0;//R
-        preparedLedArray.array[i + (1*NUMBER_OF_COLORS)+1] = filtersValues.midFilter.ledBrightness;//G
-        preparedLedArray.array[i + (1*NUMBER_OF_COLORS)+2] = 0;//B
-        preparedLedArray.array[i + (2*NUMBER_OF_COLORS)] = 0;//R
-        preparedLedArray.array[i + (2*NUMBER_OF_COLORS)+1] = 0;//G
-        preparedLedArray.array[i + (2*NUMBER_OF_COLORS)+2] = filtersValues.highFilter.ledBrightness;//B
-        preparedLedArray.array[i + (3*NUMBER_OF_COLORS)] = 0;//R
-        preparedLedArray.array[i + (3*NUMBER_OF_COLORS)+1] = filtersValues.midFilter.ledBrightness;//G
-        preparedLedArray.array[i + (3*NUMBER_OF_COLORS)+2] = 0;//B
-        preparedLedArray.array[i + (4*NUMBER_OF_COLORS)] = filtersValues.lowFilter.ledBrightness;//R
-        preparedLedArray.array[i + (4*NUMBER_OF_COLORS)+1] = 0;//G
-        preparedLedArray.array[i + (4*NUMBER_OF_COLORS)+2] = 0;//B
-    }
 }
 
 double SoundAnalyser::calcMagnitude(const fftw_complex &realSample){
@@ -170,13 +140,32 @@ void SoundAnalyser::adjustFilterLimits(FilteredValues* filter){
 uint8_t SoundAnalyser::calcLedBrightness(const FilteredValues &filter){
     uint8_t value = (uint8_t)std::round(((filter.highestDBFS - filter.minLimitDBFS)
                                 /(filter.maxLimitDBFS - filter.minLimitDBFS)) * MAX_BRIGHTNESS);
-    if((filter.maxLimitDBFS - filter.minLimitDBFS) <= 3){
-        return 0;
+    if((filter.maxLimitDBFS - filter.minLimitDBFS) <= DIFFERENT_MIN_MAX_FOR_DARKNESS){
+        #ifdef NO_FULL_DARKNESS
+            value = MIN_SOUND_BRIGHTNESS/2;
+        #else
+            value = 0;
+        #endif
+    }else if(value <= MIN_SOUND_BRIGHTNESS){
+        #ifdef NO_FULL_DARKNESS
+            value = MIN_SOUND_BRIGHTNESS/2;
+        #else
+            value = 0; //or return? without erturn should be smooth
+        #endif
     }
-    if(value <= 150){
-        return 0;
-    }
-    return value;
+    return (value + filter.ledBrightness + filter.ledBrightness_previous)/3;
+}
+
+void SoundAnalyser::printLogs(){
+    printf("\n  low = %f,         mid = %f,        high = %f\n", filtersValues.lowFilter.highestDBFS, 
+                                        filtersValues.midFilter.highestDBFS, 
+                                        filtersValues.highFilter.highestDBFS);
+    printf("%f <> %f, %f <> %f, %f <> %f\n", filtersValues.lowFilter.minLimitDBFS, filtersValues.lowFilter.maxLimitDBFS,
+                                            filtersValues.midFilter.minLimitDBFS, filtersValues.midFilter.maxLimitDBFS,
+                                            filtersValues.highFilter.minLimitDBFS, filtersValues.highFilter.maxLimitDBFS);
+    printf("brtns-low = %d,      brtns-mid = %d,     brtns-high = %d\n", filtersValues.lowFilter.ledBrightness, 
+                                        filtersValues.midFilter.ledBrightness, 
+                                        filtersValues.highFilter.ledBrightness);
 }
 
 void SoundAnalyser::checkIfErrorOccured(){

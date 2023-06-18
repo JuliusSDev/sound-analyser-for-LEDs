@@ -10,6 +10,8 @@
 #include "portaudio.h"
 #include "BluetoothCommunicator.hpp"
 
+// #define DEBUG
+
 
 #define SAMPLE_RATE  (48000) // 44100 was - 48000 in system
 #define FRAMES_PER_BUFFER (2048) //512 was (93.75HZ analizing) - 4096 good - 1024 in system propably // better 2048 || 1024
@@ -32,8 +34,10 @@ typedef float SAMPLE;
 #define MIDDLE_HIGH_SEPARATION_FREQUENCY (2500)
 
 /*Filters adjustment steps*/
-#define MIN_ADJUST_STEP (1)
-#define MAX_ADJUST_STEP (0.5)
+#define MIN_ADJUST_STEP (1) //for 2048
+#define MAX_ADJUST_STEP (0.5) //for 2048
+// #define MIN_ADJUST_STEP (0.5) //for 1024
+// #define MAX_ADJUST_STEP (0.25) //for 1024
 
 
 /*
@@ -75,6 +79,7 @@ class SoundAnalyser{
             double maxLimitDBFS = 0;
             double minLimitDBFS = SILENT_DBFS;
             uint8_t ledBrightness = 0;
+            uint8_t ledBrightness_previous = 0;
             void clearHighestDBFS(){highestDBFS = SILENT_DBFS;}
         };
         struct Filters{
@@ -87,18 +92,15 @@ class SoundAnalyser{
                 highFilter.clearHighestDBFS();
             }
         }filtersValues;
-        struct ArrWithSize{
-            uint8_t* array; // 1byte - op numb + 2bytes size of arr + 3*size bytes ledarray
-            uint16_t size;
-        }preparedLedArray;
 
         void checkIfErrorOccured();
         void analizeSamples(SamplesBuffer samplesBuffer);  //TODO have to be a thread which will have while(1) loop?, at the end of the loop thread will be blocked. recordCallback will unblockthread and update information(samplesBuffer)in it
         void convertRelativeMagsToBrightnessInFilters();
-        void prepareSoundLedArray();
         double calcMagnitude(const fftw_complex& realSample);
         void adjustFilterLimits(FilteredValues* filter);
         uint8_t calcLedBrightness(const FilteredValues& filter);
+
+        void printLogs();
 
         /* This routine will be called by the PortAudio engine when audio is needed.
         ** It may be called at interrupt level on some machines so don't do anything

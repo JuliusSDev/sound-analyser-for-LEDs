@@ -29,3 +29,21 @@ void BluetoothCommunicator::sendData(uint8_t *buffer, size_t bufferSize){
         throw BluetoothException("Failed to send data");
     }
 }
+
+void BluetoothCommunicator::add24bitColorToArray(uint8_t red, uint8_t green, uint8_t blue, uint8_t *buffer, int insertIndex){
+    buffer[insertIndex] = red;
+    buffer[insertIndex + 1] = green;
+    buffer[insertIndex + 2] = blue;
+}
+
+void BluetoothCommunicator::send_RGB_EQ_SOUND(uint8_t red, uint8_t green, uint8_t blue){
+    commandBuffer_EQ_SOUND[0] = COMCODE_RGB_EQ_SOUND;
+    add24bitColorToArray(red, green, blue, commandBuffer_EQ_SOUND, SIZE_OF_COMCODE);
+    sendData(commandBuffer_EQ_SOUND, SIZE_OF_COMCODE + NUMBER_OF_COLORS);
+}
+
+void BluetoothCommunicator::send_ONE_COLOR_EQ_SOUND(uint8_t red, uint8_t green, uint8_t blue){
+    commandBuffer_EQ_SOUND[0] = COMCODE_ONE_COLOR_EQ_SOUND;
+    add24bitColorToArray(red, green, blue, commandBuffer_EQ_SOUND, SIZE_OF_COMCODE);
+    sendData(commandBuffer_EQ_SOUND, SIZE_OF_COMCODE + NUMBER_OF_COLORS);
+}
