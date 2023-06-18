@@ -30,16 +30,10 @@ typedef float SAMPLE;
 /*Sound analize*/
 #define LOW_MIDDLE_SEPARATION_FREQUENCY (250)  // 250HZ - only basses :) 500 - normal
 #define MIDDLE_HIGH_SEPARATION_FREQUENCY (2500)
-// #define MIN_LOW_DBFS_FOR_ZERO_BRIGHTNESS -350
-// #define MIN_MID_DBFS_FOR_ZERO_BRIGHTNESS -2500
-// #define MIN_HIGH_DBFS_FOR_ZERO_BRIGHTNESS -35000
 
-#define MIN_LOW_DBFS_FOR_ZERO_BRIGHTNESS -320
-#define MIN_MID_DBFS_FOR_ZERO_BRIGHTNESS -3200
-#define MIN_HIGH_DBFS_FOR_ZERO_BRIGHTNESS -55000
-// #define MIN_LOW_DBFS_FOR_ZERO_BRIGHTNESS -500
-// #define MIN_MID_DBFS_FOR_ZERO_BRIGHTNESS -4000
-// #define MIN_HIGH_DBFS_FOR_ZERO_BRIGHTNESS -80000
+/*Filters adjustment steps*/
+#define MIN_ADJUST_STEP (1)
+#define MAX_ADJUST_STEP (0.5)
 
 
 /*
@@ -77,15 +71,21 @@ class SoundAnalyser{
         double              dbfsRefference;
 
         struct FilteredValues{
-            size_t frequencesCounter;
-            double DBFS;
-            double maxDBFS = 0;
-            uint8_t ledBrightness;
+            double highestDBFS = SILENT_DBFS;
+            double maxLimitDBFS = 0;
+            double minLimitDBFS = SILENT_DBFS;
+            uint8_t ledBrightness = 0;
+            void clearHighestDBFS(){highestDBFS = SILENT_DBFS;}
         };
         struct Filters{
-            struct FilteredValues LowFilter;
-            struct FilteredValues MidFilter;
-            struct FilteredValues HighFilter;
+            struct FilteredValues lowFilter;
+            struct FilteredValues midFilter;
+            struct FilteredValues highFilter;
+            void clearFiltersHighestValues(){
+                lowFilter.clearHighestDBFS();
+                midFilter.clearHighestDBFS();
+                highFilter.clearHighestDBFS();
+            }
         }filtersValues;
         struct ArrWithSize{
             uint8_t* array; // 1byte - op numb + 2bytes size of arr + 3*size bytes ledarray
@@ -97,7 +97,8 @@ class SoundAnalyser{
         void convertRelativeMagsToBrightnessInFilters();
         void prepareSoundLedArray();
         double calcMagnitude(const fftw_complex& realSample);
-        void resetFiltersValues();
+        void adjustFilterLimits(FilteredValues* filter);
+        uint8_t calcLedBrightness(const FilteredValues& filter);
 
         /* This routine will be called by the PortAudio engine when audio is needed.
         ** It may be called at interrupt level on some machines so don't do anything

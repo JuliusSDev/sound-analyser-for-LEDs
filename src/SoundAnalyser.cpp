@@ -70,7 +70,7 @@ void SoundAnalyser::analizeSamples(SamplesBuffer samplesBuffer){
     fftw_execute(ftransPlan);
 
     double sampleMagnitude = 0, relativeMagnitude, frequence;
-    resetFiltersValues();    
+    filtersValues.clearFiltersHighestValues();  
     for(int i = 0; i < FREQ_MAGNITUDES_BUFFER_SIZE; i++){
         sampleMagnitude = calcMagnitude(outAnaliseBuffer[i]);
         if(sampleMagnitude > dbfsRefference){
@@ -87,104 +87,65 @@ void SoundAnalyser::analizeSamples(SamplesBuffer samplesBuffer){
         frequence = i * ((SAMPLE_RATE/2)/FREQ_MAGNITUDES_BUFFER_SIZE);
 
         if(frequence <= LOW_MIDDLE_SEPARATION_FREQUENCY){
-            filtersValues.LowFilter.DBFS += fqDBFS_linearSpectrum[i];
-            filtersValues.LowFilter.frequencesCounter++;
-            if(fqDBFS_linearSpectrum[i] > filtersValues.LowFilter.maxDBFS){
-                filtersValues.LowFilter.maxDBFS = fqDBFS_linearSpectrum[i];
+            if(fqDBFS_linearSpectrum[i] > filtersValues.lowFilter.highestDBFS){
+                filtersValues.lowFilter.highestDBFS = fqDBFS_linearSpectrum[i];
             }
         }else if(frequence <= MIDDLE_HIGH_SEPARATION_FREQUENCY){
-            filtersValues.MidFilter.DBFS += fqDBFS_linearSpectrum[i];
-            filtersValues.MidFilter.frequencesCounter++;
-            if(fqDBFS_linearSpectrum[i] > filtersValues.MidFilter.maxDBFS){
-                filtersValues.MidFilter.maxDBFS = fqDBFS_linearSpectrum[i];
+            if(fqDBFS_linearSpectrum[i] > filtersValues.midFilter.highestDBFS){
+                filtersValues.midFilter.highestDBFS = fqDBFS_linearSpectrum[i];
             }
         }else{
-            filtersValues.HighFilter.DBFS += fqDBFS_linearSpectrum[i];
-            filtersValues.HighFilter.frequencesCounter++;
-            if(fqDBFS_linearSpectrum[i] > filtersValues.HighFilter.maxDBFS){
-                filtersValues.HighFilter.maxDBFS = fqDBFS_linearSpectrum[i];
+            if(fqDBFS_linearSpectrum[i] > filtersValues.highFilter.highestDBFS){
+                filtersValues.highFilter.highestDBFS = fqDBFS_linearSpectrum[i];
             }
         }
     }
-    printf("low = %f, mid = %f, high = %f\n", filtersValues.LowFilter.DBFS, 
-                                        filtersValues.MidFilter.DBFS, 
-                                        filtersValues.HighFilter.DBFS);
     convertRelativeMagsToBrightnessInFilters();
     prepareSoundLedArray();
+    printf("  low = %f,         mid = %f,        high = %f\n", filtersValues.lowFilter.highestDBFS, 
+                                        filtersValues.midFilter.highestDBFS, 
+                                        filtersValues.highFilter.highestDBFS);
+    printf("%f <> %f, %f <> %f, %f <> %f\n", filtersValues.lowFilter.minLimitDBFS, filtersValues.lowFilter.maxLimitDBFS,
+                                            filtersValues.midFilter.minLimitDBFS, filtersValues.midFilter.maxLimitDBFS,
+                                            filtersValues.highFilter.minLimitDBFS, filtersValues.highFilter.maxLimitDBFS);
+    printf("brtns-low = %d,      brtns-mid = %d,     brtns-high = %d\n", filtersValues.lowFilter.ledBrightness, 
+                                        filtersValues.midFilter.ledBrightness, 
+                                        filtersValues.highFilter.ledBrightness);
     bluetoothCommunicator.sendData(preparedLedArray.array, preparedLedArray.size);  // TODO make a prepare data function. it will prepare the array with leds colors + command code+ length. Then send it with btComm.sendData()
-
-    //Sum all magnitudes for low, mid, high frequ. then devide it by number of them(avarage)
-
-
-
-    // double max_mag_db = -DBL_MAX, max_mag_db_index = 0, sampleMagnitude = 0, relativeMagnitude;
-    // for(int i = 0; i < FREQ_MAGNITUDES_BUFFER_SIZE; i++){
-    //     sampleMagnitude = calcMagnitude(outAnaliseBuffer[i]);
-    //     if(sampleMagnitude > dbfsRefference){
-    //         dbfsRefference = sampleMagnitude;
-    //     }
-    //     relativeMagnitude = sampleMagnitude / dbfsRefference;
-
-    //     if(relativeMagnitude != 0){
-    //         fqDBFS_linearSpectrum[i] = 20 * std::log10(relativeMagnitude);
-    //     }else{
-    //         fqDBFS_linearSpectrum[i] = SILENT_DBFS;
-    //     }
-
-    //     if(max_mag_db < fqDBFS_linearSpectrum[i]){
-    //         max_mag_db = fqDBFS_linearSpectrum[i];
-    //         max_mag_db_index = i;
-    //     }
-    // }
-    // printf("Max_mag_db = %f, at freq = %5.2f,   div = %f         ref = %f\n", 
-    //         max_mag_db, max_mag_db_index * ((SAMPLE_RATE/2)/FREQ_MAGNITUDES_BUFFER_SIZE), std::log10(sampleMagnitude / dbfsRefference), dbfsRefference);
 }
 
 void SoundAnalyser::convertRelativeMagsToBrightnessInFilters(){
-    filtersValues.LowFilter.ledBrightness = (uint8_t)std::round(((filtersValues.LowFilter.DBFS - MIN_LOW_DBFS_FOR_ZERO_BRIGHTNESS)
-                                                        /(filtersValues.LowFilter.maxDBFS - MIN_LOW_DBFS_FOR_ZERO_BRIGHTNESS)) * MAX_BRIGHTNESS);
-    filtersValues.MidFilter.ledBrightness = (uint8_t)std::round(((filtersValues.MidFilter.DBFS - MIN_MID_DBFS_FOR_ZERO_BRIGHTNESS)
-                                                        /(filtersValues.MidFilter.maxDBFS - MIN_MID_DBFS_FOR_ZERO_BRIGHTNESS)) * MAX_BRIGHTNESS);
-    filtersValues.HighFilter.ledBrightness = (uint8_t)std::round(((filtersValues.HighFilter.DBFS - MIN_HIGH_DBFS_FOR_ZERO_BRIGHTNESS)
-                                                        /(filtersValues.HighFilter.maxDBFS - MIN_HIGH_DBFS_FOR_ZERO_BRIGHTNESS)) * MAX_BRIGHTNESS);
+    adjustFilterLimits(&filtersValues.lowFilter);
+    adjustFilterLimits(&filtersValues.midFilter);
+    adjustFilterLimits(&filtersValues.highFilter);
+    filtersValues.lowFilter.ledBrightness = calcLedBrightness(filtersValues.lowFilter);
+    filtersValues.midFilter.ledBrightness = calcLedBrightness(filtersValues.midFilter);
+    filtersValues.highFilter.ledBrightness = calcLedBrightness(filtersValues.highFilter);
 }
 
 void SoundAnalyser::prepareSoundLedArray(){
     preparedLedArray.array[0] = COMCODE_SOUND_LEDS;
-    // preparedLedArray.array[SIZE_OF_COMCODE] = preparedLedArray.size;
     preparedLedArray.array[1] = 0;
-    preparedLedArray.array[2] = 100;
-    for(int i = 0; i < NUMBER_OF_LEDS * NUMBER_OF_COLORS; i += 5*NUMBER_OF_COLORS){
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i] = filtersValues.LowFilter.ledBrightness; //R
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i+1] = 0; //G
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i+2] = 0; //B
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (1*NUMBER_OF_COLORS)] = 0;//R
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (1*NUMBER_OF_COLORS)+1] = filtersValues.MidFilter.ledBrightness;//G
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (1*NUMBER_OF_COLORS)+2] = 0;//B
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (2*NUMBER_OF_COLORS)] = 0;//R
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (2*NUMBER_OF_COLORS)+1] = 0;//G
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (2*NUMBER_OF_COLORS)+2] = filtersValues.HighFilter.ledBrightness;//B
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (3*NUMBER_OF_COLORS)] = 0;//R
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (3*NUMBER_OF_COLORS)+1] = filtersValues.MidFilter.ledBrightness;//G
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (3*NUMBER_OF_COLORS)+2] = 0;//B
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (4*NUMBER_OF_COLORS)] = filtersValues.LowFilter.ledBrightness;//R
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (4*NUMBER_OF_COLORS)+1] = 0;//G
-        preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (4*NUMBER_OF_COLORS)+2] = 0;//B
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i] = 255; //R
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i+1] = 0; //G
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i+2] = 0; //B
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (1*NUMBER_OF_COLORS)] = 0;//R
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (1*NUMBER_OF_COLORS)+1] = 255;//G
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (1*NUMBER_OF_COLORS)+2] = 0;//B
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (2*NUMBER_OF_COLORS)] = 0;//R
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (2*NUMBER_OF_COLORS)+1] = 0;//G
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (2*NUMBER_OF_COLORS)+2] = 255;//B
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (3*NUMBER_OF_COLORS)] = 0;//R
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (3*NUMBER_OF_COLORS)+1] = 255;//G
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (3*NUMBER_OF_COLORS)+2] = 0;//B
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (4*NUMBER_OF_COLORS)] = 255;//R
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (4*NUMBER_OF_COLORS)+1] = 0;//G
-        // preparedLedArray.array[SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH + i + (4*NUMBER_OF_COLORS)+2] = 0;//B
+    preparedLedArray.array[2] = NUMBER_OF_LEDS;
+    for(int i = SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH; 
+            i < ((NUMBER_OF_LEDS * NUMBER_OF_COLORS) + SIZE_OF_COMCODE + SIZE_OF_ARRAY_LENGTH); 
+            // i += NUMBER_OF_COLORS){
+            i += 5*NUMBER_OF_COLORS){
+        preparedLedArray.array[i] = filtersValues.lowFilter.ledBrightness; //R
+        preparedLedArray.array[i+1] = 0; //G
+        preparedLedArray.array[i+2] = 0; //B
+        preparedLedArray.array[i + (1*NUMBER_OF_COLORS)] = 0;//R
+        preparedLedArray.array[i + (1*NUMBER_OF_COLORS)+1] = filtersValues.midFilter.ledBrightness;//G
+        preparedLedArray.array[i + (1*NUMBER_OF_COLORS)+2] = 0;//B
+        preparedLedArray.array[i + (2*NUMBER_OF_COLORS)] = 0;//R
+        preparedLedArray.array[i + (2*NUMBER_OF_COLORS)+1] = 0;//G
+        preparedLedArray.array[i + (2*NUMBER_OF_COLORS)+2] = filtersValues.highFilter.ledBrightness;//B
+        preparedLedArray.array[i + (3*NUMBER_OF_COLORS)] = 0;//R
+        preparedLedArray.array[i + (3*NUMBER_OF_COLORS)+1] = filtersValues.midFilter.ledBrightness;//G
+        preparedLedArray.array[i + (3*NUMBER_OF_COLORS)+2] = 0;//B
+        preparedLedArray.array[i + (4*NUMBER_OF_COLORS)] = filtersValues.lowFilter.ledBrightness;//R
+        preparedLedArray.array[i + (4*NUMBER_OF_COLORS)+1] = 0;//G
+        preparedLedArray.array[i + (4*NUMBER_OF_COLORS)+2] = 0;//B
     }
 }
 
@@ -192,16 +153,30 @@ double SoundAnalyser::calcMagnitude(const fftw_complex &realSample){
     return std::sqrt(realSample[0]*realSample[0] + realSample[1]*realSample[1]);
 }
 
-void SoundAnalyser::resetFiltersValues(){
-    filtersValues.LowFilter.frequencesCounter = 0;
-    filtersValues.MidFilter.frequencesCounter = 0;
-    filtersValues.HighFilter.frequencesCounter = 0;
-    filtersValues.LowFilter.DBFS = 0;
-    filtersValues.MidFilter.DBFS = 0;
-    filtersValues.HighFilter.DBFS = 0;
-    filtersValues.LowFilter.ledBrightness = 0;
-    filtersValues.MidFilter.ledBrightness = 0;
-    filtersValues.HighFilter.ledBrightness = 0;
+void SoundAnalyser::adjustFilterLimits(FilteredValues* filter){
+    if((filter->highestDBFS > filter->minLimitDBFS) && (filter->highestDBFS < filter->maxLimitDBFS)){
+        filter->minLimitDBFS += MIN_ADJUST_STEP;
+        filter->maxLimitDBFS -= MAX_ADJUST_STEP;
+    }
+    if(filter->highestDBFS > filter->maxLimitDBFS){
+        filter->maxLimitDBFS = filter->highestDBFS;
+        //move minLimit closer to maxLimit(the same difference)????
+    }else if(filter->highestDBFS < filter->minLimitDBFS){
+        filter->minLimitDBFS = filter->highestDBFS;
+        //move maxLimit closer to minLimit on minLimit - highestDBFS(the same difference)????
+    }
+}
+
+uint8_t SoundAnalyser::calcLedBrightness(const FilteredValues &filter){
+    uint8_t value = (uint8_t)std::round(((filter.highestDBFS - filter.minLimitDBFS)
+                                /(filter.maxLimitDBFS - filter.minLimitDBFS)) * MAX_BRIGHTNESS);
+    if((filter.maxLimitDBFS - filter.minLimitDBFS) <= 3){
+        return 0;
+    }
+    if(value <= 150){
+        return 0;
+    }
+    return value;
 }
 
 void SoundAnalyser::checkIfErrorOccured(){
