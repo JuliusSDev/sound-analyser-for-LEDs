@@ -142,18 +142,18 @@ uint8_t SoundAnalyser::calcLedBrightness(const FilteredValues &filter){
                                 /(filter.maxLimitDBFS - filter.minLimitDBFS)) * MAX_BRIGHTNESS);
     if((filter.maxLimitDBFS - filter.minLimitDBFS) <= DIFFERENT_MIN_MAX_FOR_DARKNESS){
         #ifdef NO_FULL_DARKNESS
-            value = MIN_SOUND_BRIGHTNESS/2;
+            value = BRIGHTNESS_THRESHOLD/2;
         #else
             value = 0;
         #endif
-    }else if(value <= MIN_SOUND_BRIGHTNESS){
+    }else if(value <= BRIGHTNESS_THRESHOLD){
         #ifdef NO_FULL_DARKNESS
-            value = MIN_SOUND_BRIGHTNESS/2;
+            value = BRIGHTNESS_THRESHOLD/2;
         #else
-            value = 0; //or return? without erturn should be smooth
+            value = 0; //or return? without return is smooth
         #endif
     }
-    return (value + filter.ledBrightness + filter.ledBrightness_previous)/3;
+    return ((value * NEW_BRIGHTNESS_WEIGHT) + filter.ledBrightness + filter.ledBrightness_previous)/3;  //Avarage of previous is taken to make the change smooth. Weighted value is better(like value*2), blinking is smooth but also fast responding to changes
 }
 
 void SoundAnalyser::printLogs(){

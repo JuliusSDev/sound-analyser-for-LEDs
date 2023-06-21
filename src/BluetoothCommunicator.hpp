@@ -19,7 +19,7 @@
 #define MAX_BRIGHTNESS 255
 
 //sound light defines
-#define MIN_SOUND_BRIGHTNESS 150
+#define BRIGHTNESS_THRESHOLD 150
 #define DIFFERENT_MIN_MAX_FOR_DARKNESS 3
 // #define NO_FULL_DARKNESS
 

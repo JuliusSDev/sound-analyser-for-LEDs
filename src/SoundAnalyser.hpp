@@ -10,7 +10,7 @@
 #include "portaudio.h"
 #include "BluetoothCommunicator.hpp"
 
-// #define DEBUG
+#define DEBUG
 
 
 #define SAMPLE_RATE  (48000) // 44100 was - 48000 in system
@@ -30,8 +30,9 @@ typedef float SAMPLE;
 #define PRINTF_S_FORMAT "%.8f"
 
 /*Sound analize*/
-#define LOW_MIDDLE_SEPARATION_FREQUENCY (250)  // 250HZ - only basses :) 500 - normal
+#define LOW_MIDDLE_SEPARATION_FREQUENCY (250)  // 250HZ - only basses :} 500 - normal
 #define MIDDLE_HIGH_SEPARATION_FREQUENCY (2500)
+#define NEW_BRIGHTNESS_WEIGHT (2)
 
 /*Filters adjustment steps*/
 #define MIN_ADJUST_STEP (1) //for 2048
