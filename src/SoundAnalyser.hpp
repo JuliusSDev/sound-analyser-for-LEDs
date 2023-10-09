@@ -1,3 +1,4 @@
+#pragma once
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
@@ -8,9 +9,12 @@
 
 #include <fftw3.h>
 #include "portaudio.h"
+#include "CommunicatorI.hpp"
+
+//TODO move defines from this include and delete include from here
 #include "BluetoothCommunicator.hpp"
 
-#define DEBUG
+// #define DEBUG
 
 
 #define SAMPLE_RATE  (48000) // 44100 was - 48000 in system
@@ -47,9 +51,9 @@ Should not be more than 1 instance
 class SoundAnalyser{
     public:
         double*                 fqDBFS_linearSpectrum;
-        BluetoothCommunicator   bluetoothCommunicator;
+        CommunicatorI*          communicator;
 
-        SoundAnalyser(std::string bluetoothMACaddress);
+        SoundAnalyser(CommunicatorI* communicator);
         SoundAnalyser(const SoundAnalyser &parent) = delete;
         void operator=(const SoundAnalyser &parent) = delete;
         ~SoundAnalyser();

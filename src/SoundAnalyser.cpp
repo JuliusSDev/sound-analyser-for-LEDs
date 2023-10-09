@@ -1,7 +1,7 @@
 #include "SoundAnalyser.hpp"
 
-SoundAnalyser::SoundAnalyser(std::string bluetoothMACaddress):
-                            bluetoothCommunicator(bluetoothMACaddress), dbfsRefference(DBL_EPSILON){
+SoundAnalyser::SoundAnalyser(CommunicatorI* communicator):
+                            communicator(communicator), dbfsRefference(DBL_EPSILON){
     inAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
     outAnaliseBuffer = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * FRAMES_PER_BUFFER);
     ftransPlan = fftw_plan_dft_1d(FRAMES_PER_BUFFER, inAnaliseBuffer, outAnaliseBuffer, FFTW_FORWARD, FFTW_MEASURE); // probably fftw_backward
@@ -101,10 +101,14 @@ void SoundAnalyser::analizeSamples(SamplesBuffer samplesBuffer){
     #ifdef DEBUG
         printLogs();  //Show debug info
     #endif
-    bluetoothCommunicator.send_RGB_EQ_SOUND(filtersValues.lowFilter.ledBrightness,
-                                            filtersValues.midFilter.ledBrightness/2,
-                                            filtersValues.highFilter.ledBrightness/2);
-    // bluetoothCommunicator.send_ONE_COLOR_EQ_SOUND(filtersValues.lowFilter.ledBrightness, 0, 0);
+    #ifdef ONLY_BASS_LIGHT
+        communicator->send_ONE_COLOR_EQ_SOUND(filtersValues.lowFilter.ledBrightness, 0, 0);
+    #else
+        communicator->send_RGB_EQ_SOUND(filtersValues.lowFilter.ledBrightness,
+                                                filtersValues.midFilter.ledBrightness/2,
+                                                filtersValues.highFilter.ledBrightness/2);
+        // Open port tcp on localhost:14112 -> send in ASCII *{chanel_number} r g b\n*   r/g/b is 0-255
+    #endif
 }
 
 void SoundAnalyser::convertRelativeMagsToBrightnessInFilters(){
@@ -153,7 +157,7 @@ uint8_t SoundAnalyser::calcLedBrightness(const FilteredValues &filter){
             value = 0; //or return? without return is smooth
         #endif
     }
-    return ((value * NEW_BRIGHTNESS_WEIGHT) + filter.ledBrightness + filter.ledBrightness_previous)/3;  //Avarage of previous is taken to make the change smooth. Weighted value is better(like value*2), blinking is smooth but also fast responding to changes
+    return ((value * NEW_BRIGHTNESS_WEIGHT) + filter.ledBrightness + filter.ledBrightness_previous)/(2 + NEW_BRIGHTNESS_WEIGHT);  //Avarage of previous is taken to make the change smooth. Weighted value is better(like value*2), blinking is smooth but also fast responding to changes
 }
 
 void SoundAnalyser::printLogs(){
