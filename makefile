@@ -7,9 +7,9 @@ sources = src/SoundAnalyser.cpp src/BluetoothCommunicator.cpp src/TcpCommunicato
 # List your libs -l* files:
 libs = -lfftw3 -lfftw3_omp -lportaudio -fopenmp -lbluetooth
 
-includePath = /home/almthehedgehog/Documents/home/sound-analyser-for-LEDs/include/
+includePath = $(shell pwd)/include/
 
-libsPath = /home/almthehedgehog/Documents/home/sound-analyser-for-LEDs/include/
+libsPath = $(shell pwd)/include/
 
 # Specify name of your program:
 executable = target/SoundAnalyser
