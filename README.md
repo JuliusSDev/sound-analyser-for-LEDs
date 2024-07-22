@@ -12,7 +12,6 @@
  
  
 ## Introduction
-A more detailed introduction to your project. Explain what the project does, why it is useful, and any other background information.
 This project is for displaying the sound output of your device on an external LED-strip, controlled by e.g. an ESP32 (the [corresponding github-repository](https://github.com/AlmTheHedgehog/ESP32-WS2811-Bluetooth-Controller) for this).
 
 ## Features
@@ -68,9 +67,21 @@ The command `make check` builds the application and runs valgrind.
 The command `make run` builds the application and runs it.
 
 ## Contributing
+1. Fork this repository
+2. Clone the forked repository
+3. Create a new branch `git checkout -b feature-branch`
+4. Commit `git commit -m "Added feature-name"`
+5. Push to the branch `git push origin feature-branch`
+6. Open a pull request
 
 ## License
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
 ## Contact
+### Owner
+[AImTheHedgehog](https://github.com/AlmTheHedgehog) 
+
+### Contributers
+[JuliusSDev](https://github.com/JuliusSDev)
+
