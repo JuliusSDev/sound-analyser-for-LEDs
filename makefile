@@ -1,33 +1,47 @@
+# Compiler and flags
 CC := g++
 CFLAGS := -g -Wall -pedantic
 
-# Header files in the src directory
-HDR := $(wildcard src/*.hpp)
+# Directories
+SRC_DIR := src
+BUILD_DIR := build
+INCLUDE_DIR := include
+LIB_DIR := /usr/lib
 
-# Source files in the src directory
-SRCS := $(wildcard src/*.cpp)
+# Header and source files
+HDR := $(wildcard $(SRC_DIR)/*.hpp)
+SRCS := $(wildcard $(SRC_DIR)/*.cpp)
 
-# List your libs -l* files:
-libs = -lfftw3 -lfftw3_omp -lportaudio -fopenmp -lbluetooth
+# Libraries
+LIBS := -lfftw3 -lportaudio -lbluetooth
+INCLUDE_PATHS := -I$(INCLUDE_DIR) -I/usr/include
+LIB_PATHS := -L$(LIB_DIR)
 
-includePath = $(shell pwd)/include/
+# Executable
+EXECUTABLE := $(BUILD_DIR)/SoundAnalyser
 
-libsPath = $(shell pwd)/include/
+# Phony targets
+.PHONY: all clean check run
 
-# Specify name of your program:
-executable = target/SoundAnalyser
+# Default target
+all: $(EXECUTABLE)
 
-$(executable): $(SRCS) $(HDR)
-	$(CC) $(CFLAGS) -I$(includePath) -L$(libsPath) $(libs) $(SRCS) -o $(executable)
+# Build the executable
+$(EXECUTABLE): $(SRCS) $(HDR) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) $(LIB_PATHS) $(SRCS) $(LIBS) -o $(EXECUTABLE)
 
-.PHONY: clean
+# Create the build directory if it does not exist
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Clean build files
 clean:
-	rm $(executable)
+	rm -rf $(BUILD_DIR)
 
-.PHONY: check
-check: $(executable)
-	valgrind --leak-check=full --track-origins=yes ./$(executable)
+# Check the program with Valgrind
+check: $(EXECUTABLE)
+	valgrind --leak-check=full --track-origins=yes ./$(EXECUTABLE)
 
-.PHONY: run
-run:
-	./target/SoundAnalyser
+# Run the program
+run: $(EXECUTABLE)
+	./$(EXECUTABLE)
